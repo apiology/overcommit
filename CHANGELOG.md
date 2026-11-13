@@ -5,6 +5,8 @@
 * Support hooks that modify files and the index, preserving their changes while
   hiding/restoring unstaged edits without Git stash or hard resets
 * Retain a recovery patch when unstaged edits conflict with hook changes
+* Add a `diff_base` option (or `OVERCOMMIT_DIFF_BASE`) so pre-commit hooks treat
+  lines a commit restores to the merge base with that ref as unmodified
 
 ## 0.76.0
 

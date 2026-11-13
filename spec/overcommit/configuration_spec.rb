@@ -49,6 +49,22 @@ describe Overcommit::Configuration do
     it { should == File.expand_path('some-directory') }
   end
 
+  describe '#diff_base' do
+    subject { config.diff_base }
+
+    context 'when not set' do
+      let(:hash) { {} }
+
+      it { should be_nil }
+    end
+
+    context 'when set' do
+      let(:hash) { { 'diff_base' => 'origin/main' } }
+
+      it { should == 'origin/main' }
+    end
+  end
+
   describe '#concurrency' do
     before { allow(Overcommit::Utils).to receive(:processor_count).and_return(4) }
 
@@ -322,6 +338,24 @@ describe Overcommit::Configuration do
 
       it 'sets the skip option of the filtered hook to false' do
         subject.for_hook('AuthorName', 'PreCommit')['skip'].should == false
+      end
+    end
+
+    context 'when OVERCOMMIT_DIFF_BASE is set' do
+      let(:hash) { { 'diff_base' => 'origin/main' } }
+      let(:env) { { 'OVERCOMMIT_DIFF_BASE' => 'upstream/develop' } }
+
+      it 'overrides the configured diff base' do
+        subject.diff_base.should == 'upstream/develop'
+      end
+    end
+
+    context 'when OVERCOMMIT_DIFF_BASE is empty' do
+      let(:hash) { { 'diff_base' => 'origin/main' } }
+      let(:env) { { 'OVERCOMMIT_DIFF_BASE' => '' } }
+
+      it 'keeps the configured diff base' do
+        subject.diff_base.should == 'origin/main'
       end
     end
   end
