@@ -39,6 +39,15 @@ module Overcommit
       File.join(Overcommit::Utils.repo_root, @hash['plugin_directory'] || '.git-hooks')
     end
 
+    # Returns the ref whose merge base with HEAD pre-commit hooks also diff
+    # against when deciding which lines were modified, or nil if not set.
+    #
+    # @return [String, nil]
+    def diff_base
+      ref = @hash['diff_base']
+      ref.to_s.empty? ? nil : ref.to_s
+    end
+
     def concurrency
       @concurrency ||=
         begin
@@ -166,6 +175,7 @@ module Overcommit
       skipped_hooks = "#{env['SKIP']} #{env['SKIP_CHECKS']} #{env['SKIP_HOOKS']}".split(separator)
       only_hooks = env.fetch('ONLY') { '' }.split(separator)
       hook_type = hook_context.hook_class_name
+      apply_diff_base_environment!(env)
 
       if only_hooks.any? || skipped_hooks.include?('all') || skipped_hooks.include?('ALL')
         @hash[hook_type]['ALL']['skip'] = true
@@ -262,6 +272,11 @@ module Overcommit
     attr_reader :hash
 
     private
+
+    def apply_diff_base_environment!(env)
+      diff_base = env['OVERCOMMIT_DIFF_BASE']
+      @hash['diff_base'] = diff_base unless diff_base.to_s.empty?
+    end
 
     def ad_hoc_hook?(hook_context, hook_name)
       ad_hoc_conf = @hash.fetch(hook_context.hook_class_name) { {} }.fetch(hook_name) { {} }

@@ -58,6 +58,13 @@ quiet: false
 # '%{processors} / 2'.
 concurrency: '%{processors}'
 
+# Git ref (e.g. `origin/main`) whose merge base with HEAD pre-commit hooks also
+# diff against when deciding which lines a commit modified. A line then counts
+# as modified only if it differs from both HEAD and that merge base, so lines a
+# commit restores to their base content are treated as unmodified. Can be
+# overridden with the OVERCOMMIT_DIFF_BASE environment variable.
+# diff_base: 'origin/main'
+
 # Whether to check if a hook plugin has changed since Overcommit last ran it.
 # This is a defense mechanism when working with repositories which can contain
 # untrusted code (e.g. when you fetch a pull request from a third party).

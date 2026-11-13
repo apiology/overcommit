@@ -5,6 +5,9 @@ module Overcommit::HookContext
     # This module contains methods for determining what files were changed and on what unique line
     # numbers did the change occur.
     module FileModifications
+      DIFF_BASE_MUTEX = Mutex.new
+      private_constant :DIFF_BASE_MUTEX
+
       # Returns whether this hook run was triggered by `git commit --amend`
       def amendment?
         return @amendment unless @amendment.nil?
@@ -73,8 +76,42 @@ module Overcommit::HookContext
             @modified_lines[file] +=
               Overcommit::GitRepo.extract_modified_lines(file, subcmd: subcmd)
           end
+
+          # Exclude lines whose content matches the diff base, e.g. lines this
+          # commit restores to the content of the branch it will merge into
+          if diff_base_commit
+            @modified_lines[file] &=
+              Overcommit::GitRepo.extract_modified_lines(file, staged: true,
+                                                               refs: diff_base_commit)
+          end
         end
         @modified_lines[file]
+      end
+
+      # Returns the merge base of HEAD and the configured `diff_base` ref, or
+      # nil if no ref is configured or it has no merge base with HEAD.
+      def diff_base_commit
+        DIFF_BASE_MUTEX.synchronize do
+          return @diff_base_commit if defined?(@diff_base_commit)
+
+          @diff_base_commit = resolve_diff_base_commit
+        end
+      end
+
+      private
+
+      def resolve_diff_base_commit
+        ref = @config.diff_base
+        return unless ref
+
+        result = Overcommit::Utils.execute(%W[git merge-base HEAD #{ref}])
+        return result.stdout.strip if result.success?
+
+        Overcommit::Utils.log.warning(
+          "Unable to find a merge base between HEAD and diff_base `#{ref}`; " \
+          'treating every line that differs from HEAD as modified'
+        )
+        nil
       end
     end
   end

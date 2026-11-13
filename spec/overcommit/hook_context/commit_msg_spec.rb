@@ -5,7 +5,7 @@ require 'overcommit/hook_context/commit_msg'
 
 describe Overcommit::HookContext::CommitMsg do
   let(:comment_char) { '#' }
-  let(:config) { double('config') }
+  let(:config) { double('config', diff_base: nil) }
   let(:args) { [commit_message_file] }
   let(:input) { double('input') }
   let(:context) { described_class.new(config, args, input) }

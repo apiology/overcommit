@@ -38,6 +38,7 @@ any Ruby code.
   - [Gem Plugins](#gem-plugins)
   - [Quiet Hook Runs](#quiet-hook-runs)
   - [Concurrency](#concurrency)
+  - [Diff Base](#diff-base)
   - [Signature Verification](#signature-verification)
 - [Built-In Hooks](#built-in-hooks)
   - [CommitMsg](#commitmsg)
@@ -248,7 +249,7 @@ Option                                  | Description
 `exclude_branches`                      | List of branch names or glob patterns of branches that this hook should not run against.
 `exclude_remotes`                       | *`PrePush` hooks only.* List of remote names that the hook should not run against.
 `include_remote_ref_deletions`          | *`PrePush` hooks only.* By default, `PrePush` hooks will **not** run for pushes that delete a remote ref (i.e. branches or tags). Set to `true` to have the hook run even for deleted remote ref.
-`problem_on_unmodified_line`            | How to treat errors reported on lines that weren't modified during the action captured by this hook (e.g. for pre-commit hooks, warnings/errors reported on lines that were not staged with `git add` may not be warnings/errors you care about). Valid values are `report`: report errors/warnings as-is regardless of line location (default); `warn`: report errors as warnings if they are on lines you didn't modify; and `ignore`: don't display errors/warnings at all if they are on lines you didn't modify (`ignore` is _not_ recommended).
+`problem_on_unmodified_line`            | How to treat errors reported on lines that weren't modified during the action captured by this hook (e.g. for pre-commit hooks, warnings/errors reported on lines that were not staged with `git add` may not be warnings/errors you care about). Valid values are `report`: report errors/warnings as-is regardless of line location (default); `warn`: report errors as warnings if they are on lines you didn't modify; and `ignore`: don't display errors/warnings at all if they are on lines you didn't modify (`ignore` is _not_ recommended). See [Diff Base](#diff-base) to also treat lines restored to the base branch's content as unmodified.
 `on_fail`                               | Change the status of a failed hook to `warn` or `pass`. This allows you to treat failures as warnings or potentially ignore them entirely, but you should use caution when doing so as you might be hiding important information.
 `on_warn`                               | Similar to `on_fail`, change the status of a hook that returns a warning status to either `pass` (you wish to silence warnings entirely) or `fail` (you wish to treat all warnings as errors).
 `required_executable`                   | Name of an executable that must exist in order for the hook to run. If this is a path (e.g. `./bin/ruby`), ensures that the executable file exists at the given location relative to the repository root. Otherwise, if it just the name of an executable (e.g. `ruby`) checks if the executable can be found in one of the directories in the `PATH` environment variable. Set this to a specific path if you want to always use an executable that is stored in your repository. (e.g. RubyGems bin stubs, Node.js binaries, etc.)
@@ -439,6 +440,54 @@ concurrency: '%{processors} / 4'
 Note that individual hooks can specify the number of processors they require
 with the `processors` hook option. See the [hook options](#hook-options)
 section for more details.
+
+### Diff Base
+
+Pre-commit hooks count a line as modified if it differs from `HEAD`. When a
+commit restores lines to the content of the branch it will merge into (for
+example, moving a change to another pull request, or reverting it), problems
+that already exist on those lines in that branch are reported as problems on
+modified lines.
+
+Set the top-level `diff_base` option to the branch your work will merge into,
+and Overcommit will count a line as modified only if it differs from both
+`HEAD` and the merge base of `HEAD` and that ref (`git merge-base HEAD <ref>`).
+Problems on lines a commit restores to their base content are then handled
+according to [`problem_on_unmodified_line`](#hook-options).
+
+```yaml
+diff_base: 'origin/main'
+```
+
+The `OVERCOMMIT_DIFF_BASE` environment variable overrides this option. If the
+ref does not exist or has no merge base with `HEAD`, Overcommit prints a
+warning and counts every line that differs from `HEAD` as modified.
+
+To follow the base branch of the current pull request locally, you can set the
+variable with [direnv](https://direnv.net/) in `.envrc`:
+
+```bash
+# GitHub (gh)
+export OVERCOMMIT_DIFF_BASE=origin/$(gh pr view --json baseRefName -q .baseRefName)
+# GitLab (glab)
+# export OVERCOMMIT_DIFF_BASE=origin/$(glab mr view -F json | jq -r .target_branch)
+
+# Recompute when you switch branches
+watch_file .git/HEAD
+```
+
+If you work from a fork, use the name of the upstream repository's remote
+instead of `origin`.
+
+In CI, run the pre-commit hooks against the changes since the merge base with
+`--diff`, which already ignores lines that match the base:
+
+```bash
+# GitHub Actions (check out with `fetch-depth: 0`)
+overcommit --diff "$(git merge-base HEAD origin/$GITHUB_BASE_REF)"
+# GitLab CI merge request pipelines
+overcommit --diff "$CI_MERGE_REQUEST_DIFF_BASE_SHA"
+```
 
 ### Signature Verification
 

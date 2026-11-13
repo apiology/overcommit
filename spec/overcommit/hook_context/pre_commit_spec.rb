@@ -4,7 +4,7 @@ require 'spec_helper'
 require 'overcommit/hook_context/pre_commit'
 
 describe Overcommit::HookContext::PreCommit do
-  let(:config) { double('config') }
+  let(:config) { double('config', diff_base: nil) }
   let(:args) { [] }
   let(:input) { double('input') }
   let(:context) { described_class.new(config, args, input) }
@@ -661,6 +661,67 @@ describe Overcommit::HookContext::PreCommit do
       end
 
       it { should == Set.new(1..4) }
+    end
+
+    context 'when a diff base is configured' do
+      let(:config) { double('config', diff_base: 'base') }
+      let(:logger) { spy('logger') }
+
+      around do |example|
+        repo do
+          File.write(modified_file, %w[a1 a2 a3 a4 a5].map { |line| "#{line}\n" }.join)
+          `git add #{modified_file}`
+          `git commit -m "Add file"`
+          `git branch base`
+          File.write(modified_file, %w[a1 b2 a3 b4 a5].map { |line| "#{line}\n" }.join)
+          `git commit -am "Change lines 2 and 4"`
+          File.write(modified_file, %w[a1 a2 c3 b4 a5].map { |line| "#{line}\n" }.join)
+          `git add #{modified_file}`
+          example.run
+        end
+      end
+
+      before do
+        Overcommit::Utils.stub(:log).and_return(logger)
+      end
+
+      it 'excludes lines restored to the base and lines changed only by earlier commits' do
+        should == Set[3]
+      end
+
+      context 'when amending last commit' do
+        before do
+          context.stub(:amendment?).and_return(true)
+        end
+
+        it 'includes lines the amended commit changed from the base' do
+          should == Set[3, 4]
+        end
+      end
+
+      context 'when the ref does not exist' do
+        let(:config) { double('config', diff_base: 'missing') }
+
+        it 'warns once and treats lines that differ from HEAD as modified' do
+          expect(logger).to receive(:warning).once.with(/`missing`/)
+          should == Set[2, 3]
+          expect(context.modified_lines_in_file('other-file')).to eq(Set[])
+        end
+      end
+
+      context 'when the ref has no merge base with HEAD' do
+        let(:config) { double('config', diff_base: 'unrelated') }
+
+        before do
+          empty_tree = `git hash-object -t tree /dev/null`.strip
+          `git branch unrelated $(git commit-tree #{empty_tree} -m "Unrelated history")`
+        end
+
+        it 'warns and treats lines that differ from HEAD as modified' do
+          expect(logger).to receive(:warning).once.with(/`unrelated`/)
+          should == Set[2, 3]
+        end
+      end
     end
   end
 
