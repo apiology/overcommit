@@ -713,11 +713,13 @@ describe Overcommit::HookContext::PreCommit do
         let(:config) { double('config', diff_base: 'unrelated') }
 
         before do
-          empty_tree = `git hash-object -t tree /dev/null`.strip
-          `git branch unrelated $(git commit-tree #{empty_tree} -m "Unrelated history")`
+          tree = `git write-tree`.strip
+          root_commit = `git commit-tree #{tree} -m "Unrelated history"`.strip
+          `git branch unrelated #{root_commit}`
         end
 
         it 'warns and treats lines that differ from HEAD as modified' do
+          expect(`git rev-parse --verify --quiet unrelated`.strip).not_to be_empty
           expect(logger).to receive(:warning).once.with(/`unrelated`/)
           should == Set[2, 3]
         end
